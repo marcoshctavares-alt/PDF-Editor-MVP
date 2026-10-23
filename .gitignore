@@ -1,0 +1,45 @@
+# Ambientes virtuais
+venv/
+.venv/
+env/
+ENV/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# PySide6 / Qt
+*.qmlc
+*.jsc
+.qmlcache/
+qt.conf
+
+# Ferramentas de teste e cobertura
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.mypy_cache/
+.ruff_cache/
+
+# IDEs e editores
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Sistema operacional
+.DS_Store
+Thumbs.db
+
+# PDFs de teste e saídas locais (não versionar arquivos grandes ou gerados)
+*.pdf
+!docs/*.pdf
