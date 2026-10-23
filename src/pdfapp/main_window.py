@@ -9,6 +9,7 @@ from PySide6.QtWidgets import (
     QLabel,
     QMainWindow,
     QMessageBox,
+    QStyle,
     QToolBar,
     QWidget,
 )
@@ -42,6 +43,10 @@ class MainWindow(QMainWindow):
         self._page_label = QLabel("")
         self.statusBar().addPermanentWidget(self._page_label)
 
+        self._zoom_label = QLabel("")
+        self.statusBar().addPermanentWidget(self._zoom_label)
+        self._viewer.zoom_changed.connect(self._on_zoom_changed)
+
         self._create_actions()
         self._create_toolbar()
         self._update_ui()
@@ -50,11 +55,19 @@ class MainWindow(QMainWindow):
     # Construção da interface
     # ------------------------------------------------------------------
     def _create_actions(self) -> None:
+        style = self.style()
+
         self._open_action = QAction("Abrir...", self)
+        self._open_action.setIcon(
+            style.standardIcon(QStyle.StandardPixmap.SP_DialogOpenButton)
+        )
         self._open_action.setShortcut(QKeySequence.StandardKey.Open)
         self._open_action.triggered.connect(self.open_pdf)
 
         self._save_as_action = QAction("Salvar Como...", self)
+        self._save_as_action.setIcon(
+            style.standardIcon(QStyle.StandardPixmap.SP_DialogSaveButton)
+        )
         self._save_as_action.setShortcut(QKeySequence.StandardKey.SaveAs)
         self._save_as_action.triggered.connect(self.save_pdf_as)
 
@@ -77,6 +90,18 @@ class MainWindow(QMainWindow):
         self._cancel_insert_action.triggered.connect(self._exit_insert_mode)
         self.addAction(self._cancel_insert_action)
 
+        self._zoom_in_action = QAction("Zoom +", self)
+        self._zoom_in_action.setShortcut(QKeySequence("Ctrl+="))
+        self._zoom_in_action.triggered.connect(self._viewer.zoom_in)
+
+        self._zoom_out_action = QAction("Zoom −", self)
+        self._zoom_out_action.setShortcut(QKeySequence("Ctrl+-"))
+        self._zoom_out_action.triggered.connect(self._viewer.zoom_out)
+
+        self._zoom_reset_action = QAction("100%", self)
+        self._zoom_reset_action.setShortcut(QKeySequence("Ctrl+0"))
+        self._zoom_reset_action.triggered.connect(self._viewer.reset_zoom)
+
     def _create_toolbar(self) -> None:
         toolbar = QToolBar("Principal", self)
         toolbar.setMovable(False)
@@ -88,6 +113,10 @@ class MainWindow(QMainWindow):
         toolbar.addSeparator()
         toolbar.addAction(self._insert_text_action)
         self.addToolBar(toolbar)
+        toolbar.addSeparator()
+        toolbar.addAction(self._zoom_out_action)
+        toolbar.addAction(self._zoom_reset_action)
+        toolbar.addAction(self._zoom_in_action)
 
     # ------------------------------------------------------------------
     # Utilitários internos
@@ -124,6 +153,9 @@ class MainWindow(QMainWindow):
 
         self._save_as_action.setEnabled(has_doc)
         self._insert_text_action.setEnabled(has_doc)
+        self._zoom_in_action.setEnabled(has_doc)
+        self._zoom_out_action.setEnabled(has_doc)
+        self._zoom_reset_action.setEnabled(has_doc)
 
         if doc is None:
             self._prev_action.setEnabled(False)
@@ -239,6 +271,9 @@ class MainWindow(QMainWindow):
 
     def next_page(self) -> None:
         self._go_to_page(self._page_index + 1)
+
+    def _on_zoom_changed(self, zoom: float) -> None:
+        self._zoom_label.setText(f"Zoom: {int(zoom * 100)}%")
 
     def save_pdf_as(self) -> None:
         doc = self._doc
