@@ -15,6 +15,9 @@ class RenderedPage:
     channels: int  # 3 = RGB, 4 = RGBA
 
 
+__all__ = ["RenderedPage", "PdfDocument"]
+
+
 class PdfDocument:
     def __init__(self, path: str | Path):
         self.path = Path(path)
@@ -22,6 +25,13 @@ class PdfDocument:
         if not self._doc.is_pdf:
             self._doc.close()
             raise ValueError(f"Não é um PDF: {path}")
+
+    def __enter__(self) -> "PdfDocument":
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback) -> bool:
+        self.close()
+        return False
 
     @property
     def page_count(self) -> int:
@@ -67,6 +77,7 @@ class PdfDocument:
             raise ValueError(
                 "Salve em outro caminho; o PyMuPDF não sobrescreve o arquivo aberto."
             )
+        target.parent.mkdir(parents=True, exist_ok=True)
         self._doc.save(target)
 
     def close(self) -> None:
