@@ -1,5 +1,7 @@
 # PDF Editor MVP
 
+<img width="955" height="715" alt="pdfreader" src="https://github.com/user-attachments/assets/8e0cbdd6-6cca-4a66-a0eb-8bfd82444580" />
+
 Leitor e editor de PDF minimalista em Python. Interface em PySide6, engine de
 manipulação com PyMuPDF. O código é separado em duas camadas — `pdfcore`
 (engine, sem dependência de Qt) e `pdfapp` (interface) — para que a lógica de
