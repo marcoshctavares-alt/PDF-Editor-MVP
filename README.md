@@ -7,7 +7,9 @@ PDF seja testável independentemente e o projeto possa crescer sem virar uma
 bagunça.
 
 Ainda está em desenvolvimento. O que funciona hoje: abrir, visualizar,
-navegar, inserir texto e imagem, salvar como. O resto está na seção de roadmap.
+navegar, inserir texto e salvar como. O resto está na seção de roadmap.
+
+## Funcionalidades
 
 ## Funcionalidades
 
@@ -16,13 +18,12 @@ Já implementado:
 - Abrir PDFs via diálogo nativo
 - Renderizar páginas com DPI configurável
 - Navegar entre páginas (botões e atalhos de teclado)
-- Inserir texto em uma posição da página
-- Inserir imagens em um retângulo
+- Inserir texto clicando na posição desejada da página (`Ctrl+T`)
 - Exportar o PDF editado com "Salvar Como"
 
 Roadmap (sem ordem definida):
 
-- Posicionar texto/imagem clicando na página
+- Inserir imagens com posicionamento interativo
 - Busca e substituição de texto
 - Anotações (grifar, sublinhar)
 - Controle de zoom
@@ -59,12 +60,9 @@ engine não sabe que o Qt existe, então dá para testar sem abrir janela.
 
     python main.py
 
-Abra um PDF com `Ctrl+O`, navegue com `PgUp`/`PgDown`, edite pelos botões da
-toolbar e exporte com `Ctrl+Shift+S`.
+Abra um PDF com `Ctrl+O`, navegue com `PgUp`/`PgDn`, exporte com `Ctrl+Shift+S`. Para inserir texto, clique em **Inserir Texto** na toolbar (ou `Ctrl+T`), depois clique na posição desejada da página e digite o conteúdo. Esc cancela a inserção.
 
-O PyMuPDF não sobrescreve o arquivo aberto, então o "Salvar Como" sempre exige
-um caminho novo. A aplicação bloqueia a tentativa de sobrescrever para não
-gerar confusão.
+O PyMuPDF não sobrescreve o arquivo aberto, então o "Salvar Como" sempre exige um caminho novo. A aplicação bloqueia a tentativa de sobrescrever para não gerar confusão.
 
 ## Estrutura
 
@@ -72,11 +70,15 @@ gerar confusão.
     ├── main.py
     ├── requirements.txt
     ├── README.md
+    ├── LICENSE
+    ├── .gitignore
     └── src/
+        ├── __init__.py
         ├── pdfcore/           # engine, sem Qt
-        │   ├── document.py
-        │   └── edit.py
+        │   ├── __init__.py
+        │   └── document.py
         └── pdfapp/            # interface
+            ├── __init__.py
             ├── main_window.py
             ├── qt_image.py    # conversão Pixmap -> QImage
             └── viewer.py
