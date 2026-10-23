@@ -9,7 +9,6 @@ bagunça.
 Ainda está em desenvolvimento. O que funciona hoje: abrir, visualizar,
 navegar, inserir texto e salvar como. O resto está na seção de roadmap.
 
-## Funcionalidades
 
 ## Funcionalidades
 
