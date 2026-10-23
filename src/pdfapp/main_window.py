@@ -1,9 +1,11 @@
 import os
 from pathlib import Path
 
+from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QCloseEvent, QKeySequence, QPixmap
 from PySide6.QtWidgets import (
     QFileDialog,
+    QInputDialog,
     QLabel,
     QMainWindow,
     QMessageBox,
@@ -17,6 +19,8 @@ from src.pdfcore.document import PdfDocument
 
 APP_TITLE = "Leitor de PDF"
 PDF_FILTER = "PDF (*.pdf)"
+RENDER_DPI = 120
+INSERT_MODE_HINT = "Clique na página para inserir texto (Esc cancela)"
 
 
 class MainWindow(QMainWindow):
@@ -26,11 +30,13 @@ class MainWindow(QMainWindow):
         self._doc: PdfDocument | None = None
         self._path: str | None = None
         self._page_index: int = 0
+        self._insert_mode: bool = False
 
         self.setWindowTitle(APP_TITLE)
         self.resize(900, 1000)
 
         self._viewer = PdfViewer()
+        self._viewer.page_clicked.connect(self._on_page_clicked)
         self.setCentralWidget(self._viewer)
 
         self._page_label = QLabel("")
@@ -60,6 +66,17 @@ class MainWindow(QMainWindow):
         self._next_action.setShortcut(QKeySequence("PgDn"))
         self._next_action.triggered.connect(self.next_page)
 
+        self._insert_text_action = QAction("Inserir Texto", self)
+        self._insert_text_action.setShortcut(QKeySequence("Ctrl+T"))
+        self._insert_text_action.triggered.connect(self._enter_insert_mode)
+
+        # Esc só fica habilitado enquanto o modo de inserção estiver ativo.
+        self._cancel_insert_action = QAction("Cancelar inserção", self)
+        self._cancel_insert_action.setShortcut(QKeySequence("Escape"))
+        self._cancel_insert_action.setEnabled(False)
+        self._cancel_insert_action.triggered.connect(self._exit_insert_mode)
+        self.addAction(self._cancel_insert_action)
+
     def _create_toolbar(self) -> None:
         toolbar = QToolBar("Principal", self)
         toolbar.setMovable(False)
@@ -68,6 +85,8 @@ class MainWindow(QMainWindow):
         toolbar.addSeparator()
         toolbar.addAction(self._prev_action)
         toolbar.addAction(self._next_action)
+        toolbar.addSeparator()
+        toolbar.addAction(self._insert_text_action)
         self.addToolBar(toolbar)
 
     # ------------------------------------------------------------------
@@ -86,7 +105,9 @@ class MainWindow(QMainWindow):
             self._show_error("Erro ao fechar o documento", exc)
 
     def _render_page(self, doc: PdfDocument, index: int) -> QPixmap:
-        rendered = doc.render_page(index)
+        # O DPI passado aqui precisa ser o mesmo usado na conversão
+        # pixel -> ponto em _on_page_clicked.
+        rendered = doc.render_page(index, dpi=RENDER_DPI)
         return rendered_to_qpixmap(rendered)
 
     @staticmethod
@@ -102,6 +123,7 @@ class MainWindow(QMainWindow):
         has_doc = doc is not None
 
         self._save_as_action.setEnabled(has_doc)
+        self._insert_text_action.setEnabled(has_doc)
 
         if doc is None:
             self._prev_action.setEnabled(False)
@@ -118,6 +140,53 @@ class MainWindow(QMainWindow):
         )
         name = Path(self._path).name if self._path else ""
         self.setWindowTitle(f"{name} — {APP_TITLE}" if name else APP_TITLE)
+
+    # ------------------------------------------------------------------
+    # Modo de inserção de texto
+    # ------------------------------------------------------------------
+    def _enter_insert_mode(self) -> None:
+        if self._doc is None:
+            return
+        self._insert_mode = True
+        self._viewer.setCursor(Qt.CursorShape.CrossCursor)
+        self._cancel_insert_action.setEnabled(True)
+        self.statusBar().showMessage(INSERT_MODE_HINT)
+
+    def _exit_insert_mode(self) -> None:
+        self._insert_mode = False
+        self._viewer.unsetCursor()
+        self._cancel_insert_action.setEnabled(False)
+        self.statusBar().clearMessage()
+
+    def _on_page_clicked(self, x: float, y: float) -> None:
+        if not self._insert_mode:
+            return
+
+        doc = self._doc
+        if doc is None:
+            self._exit_insert_mode()
+            return
+
+        try:
+            text, ok = QInputDialog.getText(
+                self, "Inserir Texto", "Texto a inserir:"
+            )
+            if not ok or not text.strip():
+                return
+
+            # Pixels do pixmap -> pontos do PDF (1 pt = 1/72 polegada).
+            pt_x = x * 72 / RENDER_DPI
+            pt_y = y * 72 / RENDER_DPI
+
+            doc.insert_text(self._page_index, pt_x, pt_y, text)
+        except Exception as exc:
+            self._show_error("Erro ao inserir texto", exc)
+            return
+        finally:
+            self._exit_insert_mode()
+
+        # Só chega aqui se a inserção foi bem-sucedida.
+        self._go_to_page(self._page_index)
 
     # ------------------------------------------------------------------
     # Ações
@@ -147,6 +216,7 @@ class MainWindow(QMainWindow):
         self._doc = new_doc
         self._path = path
         self._page_index = 0
+        self._exit_insert_mode()
         self._close_document(old_doc)
         self._update_ui()
 
