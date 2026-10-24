@@ -1,6 +1,7 @@
 # PDF Editor MVP
 
-<img width="955" height="715" alt="pdfreader" src="https://github.com/user-attachments/assets/8e0cbdd6-6cca-4a66-a0eb-8bfd82444580" />
+<img width="836" height="716" alt="Captura de tela 2026-10-24 105822" src="https://github.com/user-attachments/assets/d77dbbbe-b5c6-4f6e-9a91-2fab30e752f4" />
+
 
 Leitor e editor de PDF minimalista em Python. Interface em PySide6, engine de
 manipulação com PyMuPDF. O código é separado em duas camadas — `pdfcore`
