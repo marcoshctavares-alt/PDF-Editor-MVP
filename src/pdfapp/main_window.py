@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QAction, QCloseEvent, QKeySequence, QPixmap
 from PySide6.QtWidgets import (
     QFileDialog,
@@ -9,12 +9,14 @@ from PySide6.QtWidgets import (
     QLabel,
     QMainWindow,
     QMessageBox,
-    QStyle,
+    QSizePolicy,
     QToolBar,
+    QToolButton,
     QWidget,
 )
 
 from src.pdfapp.qt_image import rendered_to_qpixmap
+from src.pdfapp.theme import make_icon
 from src.pdfapp.viewer import PdfViewer
 from src.pdfcore.document import PdfDocument
 
@@ -22,6 +24,7 @@ APP_TITLE = "Leitor de PDF"
 PDF_FILTER = "PDF (*.pdf)"
 RENDER_DPI = 120
 INSERT_MODE_HINT = "Clique na página para inserir texto (Esc cancela)"
+TOOLBAR_ICON_SIZE = 20
 
 
 class MainWindow(QMainWindow):
@@ -35,17 +38,22 @@ class MainWindow(QMainWindow):
 
         self.setWindowTitle(APP_TITLE)
         self.resize(900, 1000)
+        self.setMinimumSize(640, 480)
 
         self._viewer = PdfViewer()
         self._viewer.page_clicked.connect(self._on_page_clicked)
         self.setCentralWidget(self._viewer)
 
         self._page_label = QLabel("")
+        self._page_label.setObjectName("statusPill")
         self.statusBar().addPermanentWidget(self._page_label)
 
         self._zoom_label = QLabel("")
+        self._zoom_label.setObjectName("statusPill")
         self.statusBar().addPermanentWidget(self._zoom_label)
         self._viewer.zoom_changed.connect(self._on_zoom_changed)
+
+        self.statusBar().setSizeGripEnabled(False)
 
         self._create_actions()
         self._create_toolbar()
@@ -54,34 +62,49 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
     # Construção da interface
     # ------------------------------------------------------------------
-    def _create_actions(self) -> None:
-        style = self.style()
-
-        self._open_action = QAction("Abrir...", self)
-        self._open_action.setIcon(
-            style.standardIcon(QStyle.StandardPixmap.SP_DialogOpenButton)
+    @staticmethod
+    def _set_tooltip(action: QAction) -> None:
+        """Tooltip no formato 'Nome (atalho)'."""
+        name = action.text().replace("&", "").rstrip(".")
+        shortcut = action.shortcut().toString(
+            QKeySequence.SequenceFormat.NativeText
         )
+        action.setToolTip(f"{name} ({shortcut})" if shortcut else name)
+
+    def _create_actions(self) -> None:
+        self._open_action = QAction("Abrir", self)
+        self._open_action.setIcon(make_icon("open"))
         self._open_action.setShortcut(QKeySequence.StandardKey.Open)
         self._open_action.triggered.connect(self.open_pdf)
+        self._set_tooltip(self._open_action)
 
-        self._save_as_action = QAction("Salvar Como...", self)
-        self._save_as_action.setIcon(
-            style.standardIcon(QStyle.StandardPixmap.SP_DialogSaveButton)
-        )
+        self._save_as_action = QAction("Salvar Como", self)
+        self._save_as_action.setIcon(make_icon("save"))
         self._save_as_action.setShortcut(QKeySequence.StandardKey.SaveAs)
         self._save_as_action.triggered.connect(self.save_pdf_as)
+        self._set_tooltip(self._save_as_action)
 
         self._prev_action = QAction("Anterior", self)
+        self._prev_action.setIcon(make_icon("prev"))
         self._prev_action.setShortcut(QKeySequence("PgUp"))
         self._prev_action.triggered.connect(self.previous_page)
+        self._set_tooltip(self._prev_action)
 
         self._next_action = QAction("Próxima", self)
+        self._next_action.setIcon(make_icon("next"))
         self._next_action.setShortcut(QKeySequence("PgDn"))
         self._next_action.triggered.connect(self.next_page)
+        self._set_tooltip(self._next_action)
 
+        # Marcável: o botão fica "afundado" enquanto o modo de inserção
+        # estiver ativo. Usa toggled (e não triggered) para o estado visual
+        # e o modo nunca ficarem fora de sincronia.
         self._insert_text_action = QAction("Inserir Texto", self)
+        self._insert_text_action.setIcon(make_icon("text"))
         self._insert_text_action.setShortcut(QKeySequence("Ctrl+T"))
-        self._insert_text_action.triggered.connect(self._enter_insert_mode)
+        self._insert_text_action.setCheckable(True)
+        self._insert_text_action.toggled.connect(self._on_insert_toggled)
+        self._set_tooltip(self._insert_text_action)
 
         # Esc só fica habilitado enquanto o modo de inserção estiver ativo.
         self._cancel_insert_action = QAction("Cancelar inserção", self)
@@ -91,32 +114,63 @@ class MainWindow(QMainWindow):
         self.addAction(self._cancel_insert_action)
 
         self._zoom_in_action = QAction("Zoom +", self)
+        self._zoom_in_action.setIcon(make_icon("zoom_in"))
         self._zoom_in_action.setShortcut(QKeySequence("Ctrl+="))
         self._zoom_in_action.triggered.connect(self._viewer.zoom_in)
+        self._set_tooltip(self._zoom_in_action)
 
         self._zoom_out_action = QAction("Zoom −", self)
+        self._zoom_out_action.setIcon(make_icon("zoom_out"))
         self._zoom_out_action.setShortcut(QKeySequence("Ctrl+-"))
         self._zoom_out_action.triggered.connect(self._viewer.zoom_out)
+        self._set_tooltip(self._zoom_out_action)
 
         self._zoom_reset_action = QAction("100%", self)
         self._zoom_reset_action.setShortcut(QKeySequence("Ctrl+0"))
         self._zoom_reset_action.triggered.connect(self._viewer.reset_zoom)
+        self._set_tooltip(self._zoom_reset_action)
 
     def _create_toolbar(self) -> None:
         toolbar = QToolBar("Principal", self)
+        toolbar.setObjectName("mainToolbar")
         toolbar.setMovable(False)
+        toolbar.setFloatable(False)
+        toolbar.setContextMenuPolicy(Qt.ContextMenuPolicy.PreventContextMenu)
+        toolbar.setIconSize(QSize(TOOLBAR_ICON_SIZE, TOOLBAR_ICON_SIZE))
+        toolbar.setToolButtonStyle(Qt.ToolButtonStyle.ToolButtonTextBesideIcon)
+
+        # Grupo: arquivo
         toolbar.addAction(self._open_action)
         toolbar.addAction(self._save_as_action)
         toolbar.addSeparator()
+        # Grupo: navegação
         toolbar.addAction(self._prev_action)
         toolbar.addAction(self._next_action)
         toolbar.addSeparator()
+        # Grupo: edição
         toolbar.addAction(self._insert_text_action)
-        self.addToolBar(toolbar)
-        toolbar.addSeparator()
+
+        # Empurra o grupo de zoom para a direita.
+        spacer = QWidget()
+        spacer.setSizePolicy(
+            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Preferred
+        )
+        toolbar.addWidget(spacer)
+
+        # Grupo: zoom
         toolbar.addAction(self._zoom_out_action)
         toolbar.addAction(self._zoom_reset_action)
         toolbar.addAction(self._zoom_in_action)
+
+        # Os botões de zoom mostram só o ícone; o resto mostra ícone + texto.
+        for action in (self._zoom_out_action, self._zoom_in_action):
+            button = toolbar.widgetForAction(action)
+            if isinstance(button, QToolButton):
+                button.setToolButtonStyle(
+                    Qt.ToolButtonStyle.ToolButtonIconOnly
+                )
+
+        self.addToolBar(toolbar)
 
     # ------------------------------------------------------------------
     # Utilitários internos
@@ -147,6 +201,12 @@ class MainWindow(QMainWindow):
             os.path.realpath(b)
         )
 
+    @staticmethod
+    def _set_pill(label: QLabel, text: str) -> None:
+        """Atualiza um rótulo da barra de status e o esconde se vazio."""
+        label.setText(text)
+        label.setVisible(bool(text))
+
     def _update_ui(self) -> None:
         doc = self._doc
         has_doc = doc is not None
@@ -160,15 +220,20 @@ class MainWindow(QMainWindow):
         if doc is None:
             self._prev_action.setEnabled(False)
             self._next_action.setEnabled(False)
-            self._page_label.setText("")
+            self._set_pill(self._page_label, "")
+            self._set_pill(self._zoom_label, "")
             self.setWindowTitle(APP_TITLE)
             return
 
         last_index = doc.page_count - 1
         self._prev_action.setEnabled(self._page_index > 0)
         self._next_action.setEnabled(self._page_index < last_index)
-        self._page_label.setText(
-            f"Página {self._page_index + 1} de {doc.page_count}"
+        self._set_pill(
+            self._page_label,
+            f"Página {self._page_index + 1} de {doc.page_count}",
+        )
+        self._set_pill(
+            self._zoom_label, f"Zoom: {round(self._viewer.zoom * 100)}%"
         )
         name = Path(self._path).name if self._path else ""
         self.setWindowTitle(f"{name} — {APP_TITLE}" if name else APP_TITLE)
@@ -176,19 +241,35 @@ class MainWindow(QMainWindow):
     # ------------------------------------------------------------------
     # Modo de inserção de texto
     # ------------------------------------------------------------------
+    def _set_insert_mode(self, active: bool) -> None:
+        """Ponto único de entrada/saída do modo de inserção."""
+        if active and self._doc is None:
+            active = False
+
+        self._insert_mode = active
+
+        # Mantém o botão marcado em sincronia sem disparar toggled de novo.
+        if self._insert_text_action.isChecked() != active:
+            self._insert_text_action.blockSignals(True)
+            self._insert_text_action.setChecked(active)
+            self._insert_text_action.blockSignals(False)
+
+        self._cancel_insert_action.setEnabled(active)
+        if active:
+            self._viewer.setCursor(Qt.CursorShape.CrossCursor)
+            self.statusBar().showMessage(INSERT_MODE_HINT)
+        else:
+            self._viewer.unsetCursor()
+            self.statusBar().clearMessage()
+
+    def _on_insert_toggled(self, checked: bool) -> None:
+        self._set_insert_mode(checked)
+
     def _enter_insert_mode(self) -> None:
-        if self._doc is None:
-            return
-        self._insert_mode = True
-        self._viewer.setCursor(Qt.CursorShape.CrossCursor)
-        self._cancel_insert_action.setEnabled(True)
-        self.statusBar().showMessage(INSERT_MODE_HINT)
+        self._set_insert_mode(True)
 
     def _exit_insert_mode(self) -> None:
-        self._insert_mode = False
-        self._viewer.unsetCursor()
-        self._cancel_insert_action.setEnabled(False)
-        self.statusBar().clearMessage()
+        self._set_insert_mode(False)
 
     def _on_page_clicked(self, x: float, y: float) -> None:
         if not self._insert_mode:
@@ -273,7 +354,7 @@ class MainWindow(QMainWindow):
         self._go_to_page(self._page_index + 1)
 
     def _on_zoom_changed(self, zoom: float) -> None:
-        self._zoom_label.setText(f"Zoom: {int(zoom * 100)}%")
+        self._set_pill(self._zoom_label, f"Zoom: {round(zoom * 100)}%")
 
     def save_pdf_as(self) -> None:
         doc = self._doc
