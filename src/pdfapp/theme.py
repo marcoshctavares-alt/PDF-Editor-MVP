@@ -84,6 +84,17 @@ _ICONS: dict[str, list[tuple]] = {
         ("poly", [(15.5, 15.5), (20, 20)], False),
         ("poly", [(8, 10.5), (13, 10.5)], False),
     ],
+    "trash": [
+        ("poly", [(4, 7), (20, 7)], False),
+        ("poly", [(9, 7), (9, 4.5), (15, 4.5), (15, 7)], False),
+        ("poly", [(6, 7), (7, 20), (17, 20), (18, 7)], False),
+        ("poly", [(10, 11), (10, 16)], False),
+        ("poly", [(14, 11), (14, 16)], False),
+    ],
+    "edit": [
+        ("poly", [(4, 20), (4, 15.5), (15.5, 4), (20, 8.5), (8.5, 20)], True),
+        ("poly", [(13, 6.5), (17.5, 11)], False),
+    ],
     "document": [
         ("poly", [(6, 3), (14, 3), (19, 8), (19, 21), (6, 21)], True),
         ("poly", [(14, 3), (14, 8), (19, 8)], False),
@@ -302,6 +313,60 @@ QLineEdit {
 }
 QLineEdit:focus {
     border-color: $accent;
+}
+QPushButton:disabled {
+    background: $window;
+    color: $text_disabled;
+    border-color: $border;
+}
+
+/* ---------- Painel de propriedades do texto ---------- */
+QFrame#propertiesPanel {
+    background: $surface;
+    border: none;
+    border-left: 1px solid $border;
+}
+QLabel#panelTitle {
+    color: $text;
+    font-weight: bold;
+    font-size: 14px;
+}
+QLabel#panelHint {
+    color: $text_muted;
+}
+QLabel#fieldLabel {
+    color: $text_muted;
+}
+QToolButton#styleToggle {
+    background: $surface;
+    color: $text;
+    border: 1px solid $border_strong;
+    border-radius: 6px;
+    min-width: 34px;
+    min-height: 28px;
+}
+QToolButton#styleToggle:hover {
+    background: $hover;
+}
+QToolButton#styleToggle:checked {
+    background: $accent_soft;
+    border-color: $accent;
+    color: $accent;
+}
+QToolButton#styleToggle:disabled {
+    background: $window;
+    color: $text_disabled;
+    border-color: $border;
+}
+QPushButton#dangerButton:hover {
+    background: #FDECEC;
+    border-color: #F2B8B5;
+    color: #B42318;
+}
+QPushButton#dangerButton:disabled {
+    background: $window;
+    color: $text_disabled;
+    border-color: $border;
 }
 """
 )

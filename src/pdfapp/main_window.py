@@ -5,6 +5,7 @@ from PySide6.QtCore import QSize, Qt
 from PySide6.QtGui import QAction, QCloseEvent, QKeySequence, QPixmap
 from PySide6.QtWidgets import (
     QFileDialog,
+    QHBoxLayout,
     QInputDialog,
     QLabel,
     QMainWindow,
@@ -16,9 +17,16 @@ from PySide6.QtWidgets import (
 )
 
 from src.pdfapp.qt_image import rendered_to_qpixmap
+from src.pdfapp.text_panel import TextPropertiesPanel
 from src.pdfapp.theme import make_icon
 from src.pdfapp.viewer import PdfViewer
 from src.pdfcore.document import PdfDocument
+from src.pdfcore.text_items import (
+    DEFAULT_COLOR,
+    DEFAULT_FAMILY,
+    DEFAULT_FONT_SIZE,
+    TextItem,
+)
 
 APP_TITLE = "Leitor de PDF"
 PDF_FILTER = "PDF (*.pdf)"
@@ -36,13 +44,38 @@ class MainWindow(QMainWindow):
         self._page_index: int = 0
         self._insert_mode: bool = False
 
+        # Texto selecionado na página atual (id do TextItem) e a aparência
+        # usada nos próximos textos inseridos.
+        self._selected_id: int | None = None
+        self._defaults: dict[str, object] = {
+            "family": DEFAULT_FAMILY,
+            "bold": False,
+            "italic": False,
+            "size": DEFAULT_FONT_SIZE,
+            "color": DEFAULT_COLOR,
+        }
+
         self.setWindowTitle(APP_TITLE)
-        self.resize(900, 1000)
-        self.setMinimumSize(640, 480)
+        self.resize(1280, 1000)
+        self.setMinimumSize(760, 480)
 
         self._viewer = PdfViewer()
         self._viewer.page_clicked.connect(self._on_page_clicked)
-        self.setCentralWidget(self._viewer)
+        self._viewer.page_double_clicked.connect(self._on_page_double_clicked)
+
+        self._panel = TextPropertiesPanel()
+        self._panel.property_changed.connect(self._on_property_changed)
+        self._panel.edit_requested.connect(self._edit_selected_text)
+        self._panel.delete_requested.connect(self._delete_selected_text)
+        self._panel.set_values(**self._defaults)
+
+        central = QWidget()
+        central_layout = QHBoxLayout(central)
+        central_layout.setContentsMargins(0, 0, 0, 0)
+        central_layout.setSpacing(0)
+        central_layout.addWidget(self._viewer, 1)
+        central_layout.addWidget(self._panel)
+        self.setCentralWidget(central)
 
         self._page_label = QLabel("")
         self._page_label.setObjectName("statusPill")
@@ -58,14 +91,16 @@ class MainWindow(QMainWindow):
         self._create_actions()
         self._create_toolbar()
         self._update_ui()
+        # Sem documento, Editar/Apagar começam desabilitados.
+        self._sync_selection_ui()
 
     # ------------------------------------------------------------------
     # Construção da interface
     # ------------------------------------------------------------------
     @staticmethod
-    def _set_tooltip(action: QAction) -> None:
+    def _set_tooltip(action: QAction, name: str | None = None) -> None:
         """Tooltip no formato 'Nome (atalho)'."""
-        name = action.text().replace("&", "").rstrip(".")
+        name = name or action.text().replace("&", "").rstrip(".")
         shortcut = action.shortcut().toString(
             QKeySequence.SequenceFormat.NativeText
         )
@@ -106,12 +141,25 @@ class MainWindow(QMainWindow):
         self._insert_text_action.toggled.connect(self._on_insert_toggled)
         self._set_tooltip(self._insert_text_action)
 
-        # Esc só fica habilitado enquanto o modo de inserção estiver ativo.
-        self._cancel_insert_action = QAction("Cancelar inserção", self)
-        self._cancel_insert_action.setShortcut(QKeySequence("Escape"))
-        self._cancel_insert_action.setEnabled(False)
-        self._cancel_insert_action.triggered.connect(self._exit_insert_mode)
-        self.addAction(self._cancel_insert_action)
+        # Só habilitadas quando há um texto selecionado.
+        self._edit_text_action = QAction("Editar", self)
+        self._edit_text_action.setIcon(make_icon("edit"))
+        self._edit_text_action.setShortcut(QKeySequence("F2"))
+        self._edit_text_action.triggered.connect(self._edit_selected_text)
+        self._set_tooltip(self._edit_text_action, "Editar o texto selecionado")
+
+        self._delete_action = QAction("Apagar", self)
+        self._delete_action.setIcon(make_icon("trash"))
+        self._delete_action.setShortcut(QKeySequence.StandardKey.Delete)
+        self._delete_action.triggered.connect(self._delete_selected_text)
+        self._set_tooltip(self._delete_action, "Apagar o texto selecionado")
+
+        # Esc cancela o modo de inserção ou, se não houver, tira a seleção.
+        self._escape_action = QAction("Cancelar", self)
+        self._escape_action.setShortcut(QKeySequence("Escape"))
+        self._escape_action.setEnabled(False)
+        self._escape_action.triggered.connect(self._on_escape)
+        self.addAction(self._escape_action)
 
         self._zoom_in_action = QAction("Zoom +", self)
         self._zoom_in_action.setIcon(make_icon("zoom_in"))
@@ -149,6 +197,8 @@ class MainWindow(QMainWindow):
         toolbar.addSeparator()
         # Grupo: edição
         toolbar.addAction(self._insert_text_action)
+        toolbar.addAction(self._edit_text_action)
+        toolbar.addAction(self._delete_action)
 
         # Empurra o grupo de zoom para a direita.
         spacer = QWidget()
@@ -189,9 +239,19 @@ class MainWindow(QMainWindow):
 
     def _render_page(self, doc: PdfDocument, index: int) -> QPixmap:
         # O DPI passado aqui precisa ser o mesmo usado na conversão
-        # pixel -> ponto em _on_page_clicked.
+        # pixel <-> ponto (_pt_from_px e _px_from_pt).
         rendered = doc.render_page(index, dpi=RENDER_DPI)
         return rendered_to_qpixmap(rendered)
+
+    @staticmethod
+    def _pt_from_px(value: float) -> float:
+        """Pixels do pixmap -> pontos do PDF (1 pt = 1/72 polegada)."""
+        return value * 72 / RENDER_DPI
+
+    @staticmethod
+    def _px_from_pt(value: float) -> float:
+        """Pontos do PDF -> pixels do pixmap."""
+        return value * RENDER_DPI / 72
 
     @staticmethod
     def _is_same_path(a: str, b: str) -> bool:
@@ -216,6 +276,7 @@ class MainWindow(QMainWindow):
         self._zoom_in_action.setEnabled(has_doc)
         self._zoom_out_action.setEnabled(has_doc)
         self._zoom_reset_action.setEnabled(has_doc)
+        self._panel.setEnabled(has_doc)
 
         if doc is None:
             self._prev_action.setEnabled(False)
@@ -239,6 +300,131 @@ class MainWindow(QMainWindow):
         self.setWindowTitle(f"{name} — {APP_TITLE}" if name else APP_TITLE)
 
     # ------------------------------------------------------------------
+    # Seleção de texto
+    # ------------------------------------------------------------------
+    def _current_item(self) -> TextItem | None:
+        """Texto selecionado, ou None (e limpa a seleção se ele sumiu)."""
+        doc = self._doc
+        if doc is None or self._selected_id is None:
+            return None
+        try:
+            return doc.get_text_item(self._selected_id)
+        except KeyError:
+            self._selected_id = None
+            return None
+
+    def _item_at(self, x_px: float, y_px: float) -> TextItem | None:
+        """Texto inserido sob um ponto da página (em pixels do pixmap)."""
+        doc = self._doc
+        if doc is None:
+            return None
+        try:
+            return doc.find_text_item_at(
+                self._page_index,
+                self._pt_from_px(x_px),
+                self._pt_from_px(y_px),
+            )
+        except Exception as exc:
+            self._show_error("Erro ao localizar o texto", exc)
+            return None
+
+    def _set_selection(self, item_id: int | None) -> None:
+        self._selected_id = item_id
+        self._sync_selection_ui()
+
+    def _sync_selection_ui(self) -> None:
+        """Atualiza destaque, painel e ações conforme a seleção atual."""
+        item = self._current_item()
+        doc = self._doc
+
+        highlight: tuple[float, float, float, float] | None = None
+        if item is not None and doc is not None:
+            try:
+                left, top, right, bottom = doc.item_rect(item)
+                highlight = (
+                    self._px_from_pt(left),
+                    self._px_from_pt(top),
+                    self._px_from_pt(right - left),
+                    self._px_from_pt(bottom - top),
+                )
+            except Exception as exc:
+                self._selected_id = None
+                item = None
+                self._show_error("Erro ao medir o texto", exc)
+
+        self._viewer.set_selection(highlight)
+        if item is None:
+            self._panel.set_values(**self._defaults)
+        else:
+            self._panel.set_values(
+                item.family, item.bold, item.italic, item.size, item.color
+            )
+        self._panel.set_has_selection(item is not None)
+
+        has_selection = item is not None
+        self._edit_text_action.setEnabled(has_selection)
+        self._delete_action.setEnabled(has_selection)
+        self._update_escape_enabled()
+
+    def _update_escape_enabled(self) -> None:
+        self._escape_action.setEnabled(
+            self._insert_mode or self._selected_id is not None
+        )
+
+    def _on_escape(self) -> None:
+        if self._insert_mode:
+            self._exit_insert_mode()
+        elif self._selected_id is not None:
+            self._set_selection(None)
+
+    def _on_property_changed(self, key: str, value: object) -> None:
+        """Painel mudou: vale para o texto selecionado e para os próximos."""
+        self._defaults[key] = value
+
+        item = self._current_item()
+        doc = self._doc
+        if item is None or doc is None:
+            return
+        try:
+            doc.update_text(item.id, **{key: value})
+        except Exception as exc:
+            self._show_error("Erro ao atualizar o texto", exc)
+            self._sync_selection_ui()
+            return
+        self._go_to_page(self._page_index)
+
+    def _edit_selected_text(self) -> None:
+        item = self._current_item()
+        doc = self._doc
+        if item is None or doc is None:
+            return
+        try:
+            text, ok = QInputDialog.getText(
+                self, "Editar Texto", "Texto:", text=item.text
+            )
+            if not ok or not text.strip() or text == item.text:
+                return
+            doc.update_text(item.id, text=text)
+        except Exception as exc:
+            self._show_error("Erro ao editar o texto", exc)
+            return
+        self._go_to_page(self._page_index)
+
+    def _delete_selected_text(self) -> None:
+        item = self._current_item()
+        doc = self._doc
+        if item is None or doc is None:
+            return
+        try:
+            doc.remove_text(item.id)
+        except Exception as exc:
+            self._show_error("Erro ao apagar o texto", exc)
+            return
+        self._selected_id = None
+        self._go_to_page(self._page_index)
+        self.statusBar().showMessage("Texto apagado", 3000)
+
+    # ------------------------------------------------------------------
     # Modo de inserção de texto
     # ------------------------------------------------------------------
     def _set_insert_mode(self, active: bool) -> None:
@@ -254,13 +440,16 @@ class MainWindow(QMainWindow):
             self._insert_text_action.setChecked(active)
             self._insert_text_action.blockSignals(False)
 
-        self._cancel_insert_action.setEnabled(active)
         if active:
+            # O painel passa a mostrar a aparência do próximo texto.
+            self._selected_id = None
+            self._sync_selection_ui()
             self._viewer.setCursor(Qt.CursorShape.CrossCursor)
             self.statusBar().showMessage(INSERT_MODE_HINT)
         else:
             self._viewer.unsetCursor()
             self.statusBar().clearMessage()
+        self._update_escape_enabled()
 
     def _on_insert_toggled(self, checked: bool) -> None:
         self._set_insert_mode(checked)
@@ -272,12 +461,15 @@ class MainWindow(QMainWindow):
         self._set_insert_mode(False)
 
     def _on_page_clicked(self, x: float, y: float) -> None:
-        if not self._insert_mode:
-            return
-
         doc = self._doc
         if doc is None:
             self._exit_insert_mode()
+            return
+
+        # Fora do modo de inserção, o clique seleciona (ou desmarca) um texto.
+        if not self._insert_mode:
+            item = self._item_at(x, y)
+            self._set_selection(item.id if item is not None else None)
             return
 
         try:
@@ -287,19 +479,37 @@ class MainWindow(QMainWindow):
             if not ok or not text.strip():
                 return
 
-            # Pixels do pixmap -> pontos do PDF (1 pt = 1/72 polegada).
-            pt_x = x * 72 / RENDER_DPI
-            pt_y = y * 72 / RENDER_DPI
-
-            doc.insert_text(self._page_index, pt_x, pt_y, text)
+            # O ponto clicado vira o canto superior esquerdo do texto.
+            item = doc.add_text(
+                self._page_index,
+                self._pt_from_px(x),
+                self._pt_from_px(y),
+                text,
+                size=float(self._defaults["size"]),
+                color=self._defaults["color"],
+                family=str(self._defaults["family"]),
+                bold=bool(self._defaults["bold"]),
+                italic=bool(self._defaults["italic"]),
+            )
         except Exception as exc:
             self._show_error("Erro ao inserir texto", exc)
             return
         finally:
             self._exit_insert_mode()
 
-        # Só chega aqui se a inserção foi bem-sucedida.
+        # Só chega aqui se a inserção foi bem-sucedida: o novo texto já fica
+        # selecionado, e o painel mostra as propriedades dele.
+        self._selected_id = item.id
         self._go_to_page(self._page_index)
+
+    def _on_page_double_clicked(self, x: float, y: float) -> None:
+        if self._insert_mode or self._doc is None:
+            return
+        item = self._item_at(x, y)
+        if item is None:
+            return
+        self._set_selection(item.id)
+        self._edit_selected_text()
 
     # ------------------------------------------------------------------
     # Ações
@@ -329,9 +539,11 @@ class MainWindow(QMainWindow):
         self._doc = new_doc
         self._path = path
         self._page_index = 0
+        self._selected_id = None
         self._exit_insert_mode()
         self._close_document(old_doc)
         self._update_ui()
+        self._sync_selection_ui()
 
     def _go_to_page(self, index: int) -> None:
         doc = self._doc
@@ -342,10 +554,15 @@ class MainWindow(QMainWindow):
         try:
             pixmap = self._render_page(doc, index)
             self._viewer.show_pixmap(pixmap)
+            if index != self._page_index:
+                # Os textos pertencem a uma página: trocar de página
+                # desfaz a seleção.
+                self._selected_id = None
             self._page_index = index
         except Exception as exc:
             self._show_error("Erro ao renderizar a página", exc)
         self._update_ui()
+        self._sync_selection_ui()
 
     def previous_page(self) -> None:
         self._go_to_page(self._page_index - 1)

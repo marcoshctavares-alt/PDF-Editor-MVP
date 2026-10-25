@@ -26,7 +26,54 @@ PAGE_MARGIN_BOTTOM = 36
 SHADOW_LAYERS = 10
 SHADOW_OFFSET_Y = 3
 
+SELECTION_PADDING = 2.0
+
 EMPTY_TITLE = "Nenhum PDF aberto"
+
+
+class _SelectionOverlay(QWidget):
+    """Camada transparente sobre a página que desenha o texto selecionado.
+
+    É filha do QLabel da página (por isso é pintada por cima dele) e deixa
+    todos os cliques passarem. O retângulo é guardado em pixels do pixmap
+    ORIGINAL e multiplicado pelo zoom só na hora de pintar.
+    """
+
+    def __init__(self, parent: QWidget) -> None:
+        super().__init__(parent)
+        self.setAttribute(Qt.WidgetAttribute.WA_TransparentForMouseEvents, True)
+        self._rect: QRectF | None = None
+        self._zoom: float = 1.0
+
+    def set_state(self, rect: QRectF | None, zoom: float) -> None:
+        self._rect = rect
+        self._zoom = zoom
+        self.update()
+
+    def paintEvent(self, event) -> None:  # noqa: N802 (nome do Qt)
+        if self._rect is None:
+            return
+        zoom = self._zoom
+        rect = QRectF(
+            self._rect.x() * zoom,
+            self._rect.y() * zoom,
+            self._rect.width() * zoom,
+            self._rect.height() * zoom,
+        ).adjusted(
+            -SELECTION_PADDING,
+            -SELECTION_PADDING,
+            SELECTION_PADDING,
+            SELECTION_PADDING,
+        )
+
+        painter = QPainter(self)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        fill = QColor(theme.COLOR_ACCENT)
+        fill.setAlpha(36)
+        painter.setBrush(fill)
+        painter.setPen(QPen(QColor(theme.COLOR_ACCENT), 1.5))
+        painter.drawRoundedRect(rect, 3, 3)
+        painter.end()
 
 
 class _PageCanvas(QWidget):
@@ -134,6 +181,8 @@ class _PageCanvas(QWidget):
 class PdfViewer(QScrollArea):
     # Coordenadas do clique em PIXELS do pixmap ORIGINAL (sem escala).
     page_clicked = Signal(float, float)
+    # Duplo clique, nas mesmas coordenadas de page_clicked.
+    page_double_clicked = Signal(float, float)
     # Emitido sempre que o zoom muda (valor float, ex: 1.0, 1.25, 2.0).
     zoom_changed = Signal(float)
 
@@ -146,6 +195,7 @@ class PdfViewer(QScrollArea):
 
         self._pixmap: QPixmap | None = None
         self._zoom: float = 1.0
+        self._selection: QRectF | None = None
 
         # O label tem SEMPRE o tamanho exato do pixmap exibido (sem padding).
         self._label = QLabel()
@@ -157,6 +207,9 @@ class PdfViewer(QScrollArea):
         )
         self._label.hide()
 
+        # Camada de seleção por cima da página (filha do label).
+        self._overlay = _SelectionOverlay(self._label)
+
         # O canvas é quem se adapta à janela (centraliza, desenha a sombra);
         # o label dentro dele não é redimensionado.
         self._canvas = _PageCanvas(self._label)
@@ -166,13 +219,21 @@ class PdfViewer(QScrollArea):
         self.setWidget(self._canvas)
 
     # ------------------------------------------------------------------
-    # Exibição e zoom
+    # Exibição, seleção e zoom
     # ------------------------------------------------------------------
     def show_pixmap(self, pixmap: QPixmap) -> None:
         self._pixmap = pixmap
         self._canvas.set_empty(False)
         self._label.show()
         self._apply_zoom()
+
+    def set_selection(
+        self, rect: tuple[float, float, float, float] | None
+    ) -> None:
+        """Destaca um retângulo (x, y, largura, altura) em pixels do pixmap
+        original, ou remove o destaque se `rect` for None."""
+        self._selection = None if rect is None else QRectF(*rect)
+        self._overlay.set_state(self._selection, self._zoom)
 
     def zoom_in(self) -> None:
         self._set_zoom(self._zoom * self.ZOOM_STEP)
@@ -235,25 +296,45 @@ class PdfViewer(QScrollArea):
             )
         self._label.setPixmap(scaled)
         self._label.setFixedSize(scaled.size())
+
+        self._overlay.setGeometry(0, 0, scaled.width(), scaled.height())
+        self._overlay.raise_()
+        self._overlay.set_state(self._selection, self._zoom)
         self._canvas.update()
 
     # ------------------------------------------------------------------
-    # Clique
+    # Cliques
     # ------------------------------------------------------------------
-    def mousePressEvent(self, event: QMouseEvent) -> None:
+    def _pixmap_coords(self, event: QMouseEvent) -> tuple[float, float] | None:
+        """Posição do evento em pixels do pixmap original, ou None se o
+        clique caiu fora da página (ou se não há página carregada)."""
         pixmap = self._pixmap
-        if (
-            event.button() == Qt.MouseButton.LeftButton
-            and pixmap is not None
-            and not pixmap.isNull()
-        ):
-            origin = self._label.mapToGlobal(QPoint(0, 0))
-            global_pos = event.globalPosition()
-            # Converte do espaço do label escalado para o pixmap original.
-            x = (global_pos.x() - origin.x()) / self._zoom
-            y = (global_pos.y() - origin.y()) / self._zoom
+        if pixmap is None or pixmap.isNull():
+            return None
 
-            if 0.0 <= x < pixmap.width() and 0.0 <= y < pixmap.height():
-                self.page_clicked.emit(x, y)
+        origin = self._label.mapToGlobal(QPoint(0, 0))
+        global_pos = event.globalPosition()
+        # Converte do espaço do label escalado para o pixmap original.
+        x = (global_pos.x() - origin.x()) / self._zoom
+        y = (global_pos.y() - origin.y()) / self._zoom
+
+        if 0.0 <= x < pixmap.width() and 0.0 <= y < pixmap.height():
+            return x, y
+        return None
+
+    def mousePressEvent(self, event: QMouseEvent) -> None:
+        if event.button() == Qt.MouseButton.LeftButton:
+            coords = self._pixmap_coords(event)
+            if coords is not None:
+                self.page_clicked.emit(*coords)
 
         super().mousePressEvent(event)
+
+    def mouseDoubleClickEvent(self, event: QMouseEvent) -> None:
+        # Não chama o super: o padrão do Qt repassaria o evento a
+        # mousePressEvent e o clique seria emitido duas vezes.
+        if event.button() == Qt.MouseButton.LeftButton:
+            coords = self._pixmap_coords(event)
+            if coords is not None:
+                self.page_double_clicked.emit(*coords)
+        event.accept()
