@@ -1,14 +1,3 @@
-"""Modelo de texto inserido no PDF (sem Qt).
-
-Cada texto inserido é um TextItem imutável. A engine guarda a lista de itens
-e redesenha a página a partir do original sempre que algo muda; é assim que
-apagar e editar funcionam, já que o PyMuPDF não desfaz um `insert_text`.
-
-Convenção de coordenadas: `x` e `y` são o canto SUPERIOR ESQUERDO da caixa do
-texto, em pontos do PDF (1 pt = 1/72 polegada), origem no canto superior
-esquerdo da página, como no `render_page`.
-"""
-
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -22,7 +11,6 @@ MIN_FONT_SIZE = 4.0
 MAX_FONT_SIZE = 200.0
 DEFAULT_COLOR: Color = (0.0, 0.0, 0.0)
 
-# (família, negrito, itálico) -> nome curto da fonte base-14 no PyMuPDF.
 _FONT_CODES: dict[tuple[str, bool, bool], str] = {
     ("Helvetica", False, False): "helv",
     ("Helvetica", True, False): "hebo",
@@ -40,7 +28,6 @@ _FONT_CODES: dict[tuple[str, bool, bool], str] = {
 
 
 def font_code(family: str, bold: bool = False, italic: bool = False) -> str:
-    """Nome curto da fonte base-14. Levanta ValueError se a família não existe."""
     try:
         return _FONT_CODES[(family, bool(bold), bool(italic))]
     except KeyError:
@@ -50,7 +37,6 @@ def font_code(family: str, bold: bool = False, italic: bool = False) -> str:
 
 
 def normalize_color(color: tuple[float, float, float]) -> Color:
-    """Valida uma cor RGB com componentes de 0.0 a 1.0."""
     try:
         r, g, b = (float(c) for c in color)
     except (TypeError, ValueError):

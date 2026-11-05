@@ -1,10 +1,3 @@
-"""Tema visual claro e ícones vetoriais desenhados por código.
-
-Nada aqui depende de arquivos de imagem: os ícones são traçados com QPainter
-sobre uma grade de 24x24, no estilo "linha". Isso evita gerenciar assets e
-mantém os ícones nítidos em qualquer escala.
-"""
-
 from string import Template
 
 from PySide6.QtCore import QPointF, Qt
@@ -20,9 +13,6 @@ from PySide6.QtGui import (
 )
 from PySide6.QtWidgets import QApplication
 
-# ----------------------------------------------------------------------
-# Paleta
-# ----------------------------------------------------------------------
 COLOR_ACCENT = "#2563EB"
 COLOR_ACCENT_HOVER = "#1D4FD8"
 COLOR_ACCENT_SOFT = "#E3EDFF"
@@ -36,13 +26,9 @@ COLOR_WINDOW = "#F4F5F7"
 COLOR_CANVAS = "#E9ECF0"
 COLOR_HOVER = "#EEF1F5"
 COLOR_PRESSED = "#E1E6ED"
+COLOR_SEARCH = "#FFD54A"
+COLOR_SEARCH_CURRENT = "#FF9F1A"
 
-# ----------------------------------------------------------------------
-# Ícones (grade 24x24)
-# ----------------------------------------------------------------------
-# Cada ícone é uma lista de formas:
-#   ("poly", [(x, y), ...], fechada)   -> polilinha ou polígono
-#   ("circle", cx, cy, raio)           -> círculo
 _ICONS: dict[str, list[tuple]] = {
     "open": [
         (
@@ -84,6 +70,22 @@ _ICONS: dict[str, list[tuple]] = {
         ("poly", [(15.5, 15.5), (20, 20)], False),
         ("poly", [(8, 10.5), (13, 10.5)], False),
     ],
+    "undo": [
+        ("poly", [(9, 6), (5, 10), (9, 14)], False),
+        (
+            "poly",
+            [(5, 10), (14, 10), (18, 11.5), (19.5, 15), (18, 18.5), (14, 20), (9, 20)],
+            False,
+        ),
+    ],
+    "redo": [
+        ("poly", [(15, 6), (19, 10), (15, 14)], False),
+        (
+            "poly",
+            [(19, 10), (10, 10), (6, 11.5), (4.5, 15), (6, 18.5), (10, 20), (15, 20)],
+            False,
+        ),
+    ],
     "trash": [
         ("poly", [(4, 7), (20, 7)], False),
         ("poly", [(9, 7), (9, 4.5), (15, 4.5), (15, 7)], False),
@@ -94,6 +96,72 @@ _ICONS: dict[str, list[tuple]] = {
     "edit": [
         ("poly", [(4, 20), (4, 15.5), (15.5, 4), (20, 8.5), (8.5, 20)], True),
         ("poly", [(13, 6.5), (17.5, 11)], False),
+    ],
+    "image": [
+        ("poly", [(4, 5), (20, 5), (20, 19), (4, 19)], True),
+        ("circle", 9, 10, 1.6),
+        ("poly", [(4, 17), (9, 12.5), (13, 16.5), (15.5, 14), (20, 18)], False),
+    ],
+    "search": [
+        ("circle", 10.5, 10.5, 6.5),
+        ("poly", [(15.5, 15.5), (20, 20)], False),
+    ],
+    "up": [("poly", [(5, 14.5), (12, 7.5), (19, 14.5)], False)],
+    "down": [("poly", [(5, 9.5), (12, 16.5), (19, 9.5)], False)],
+    "close": [
+        ("poly", [(6, 6), (18, 18)], False),
+        ("poly", [(18, 6), (6, 18)], False),
+    ],
+    "highlight": [
+        ("poly", [(15, 4), (20, 9), (11, 18), (6, 18), (6, 13)], True),
+        ("poly", [(4, 21), (20, 21)], False),
+    ],
+    "underline": [
+        ("poly", [(7, 4), (7, 11), (9, 14.5), (15, 14.5), (17, 11), (17, 4)], False),
+        ("poly", [(5, 20), (19, 20)], False),
+    ],
+    "strikeout": [
+        ("poly", [(16.5, 6.5), (9, 6.5), (7, 8.5), (9, 10.5), (15, 13.5), (17, 15.5), (15, 17.5), (7.5, 17.5)], False),
+        ("poly", [(4, 12), (20, 12)], False),
+    ],
+    "copy": [
+        ("poly", [(9, 9), (19, 9), (19, 20), (9, 20)], True),
+        ("poly", [(15, 9), (15, 4), (5, 4), (5, 15), (9, 15)], False),
+    ],
+    "rotate_right": [
+        (
+            "poly",
+            [
+                (15.2, 6.9), (12.0, 6.0), (8.8, 6.9), (6.4, 9.2), (5.5, 12.5),
+                (6.4, 15.8), (8.7, 18.1), (12.0, 19.0), (15.2, 18.1), (17.6, 15.8),
+            ],
+            False,
+        ),
+        ("poly", [(16.4, 4.8), (17.2, 8.0), (14.0, 9.0)], False),
+    ],
+    "rotate_left": [
+        (
+            "poly",
+            [
+                (8.8, 6.9), (12.0, 6.0), (15.2, 6.9), (17.6, 9.2), (18.5, 12.5),
+                (17.6, 15.8), (15.3, 18.1), (12.0, 19.0), (8.8, 18.1), (6.4, 15.8),
+            ],
+            False,
+        ),
+        ("poly", [(7.6, 4.8), (6.8, 8.0), (10.0, 9.0)], False),
+    ],
+    "delete_page": [
+        (
+            "poly",
+            [(6, 3.5), (14, 3.5), (18, 7.5), (18, 20.5), (6, 20.5)],
+            True,
+        ),
+        ("poly", [(14, 3.5), (14, 7.5), (18, 7.5)], False),
+        ("poly", [(9, 14), (15, 14)], False),
+    ],
+    "sidebar": [
+        ("poly", [(4, 5), (20, 5), (20, 19), (4, 19)], True),
+        ("poly", [(9.5, 5), (9.5, 19)], False),
     ],
     "document": [
         ("poly", [(6, 3), (14, 3), (19, 8), (19, 21), (6, 21)], True),
@@ -113,7 +181,6 @@ _icon_cache: dict[str, QIcon] = {}
 def make_pixmap(
     name: str, color: str, size: int = 24, dpr: float = 1.0
 ) -> QPixmap:
-    """Desenha o ícone `name` com a cor dada, com `size` pixels lógicos."""
     physical = max(1, int(round(size * dpr)))
     pixmap = QPixmap(physical, physical)
     pixmap.setDevicePixelRatio(dpr)
@@ -151,7 +218,6 @@ def make_pixmap(
 
 
 def make_icon(name: str) -> QIcon:
-    """Ícone com variações para normal, hover, marcado e desabilitado."""
     cached = _icon_cache.get(name)
     if cached is not None:
         return cached
@@ -172,16 +238,12 @@ def make_icon(name: str) -> QIcon:
     return icon
 
 
-# ----------------------------------------------------------------------
-# Folha de estilo
-# ----------------------------------------------------------------------
 _QSS = Template(
     """
 QMainWindow {
     background: $window;
 }
 
-/* ---------- Toolbar ---------- */
 QToolBar#mainToolbar {
     background: $surface;
     border: none;
@@ -216,7 +278,6 @@ QToolBar#mainToolbar QToolButton:disabled {
     color: $text_disabled;
 }
 
-/* ---------- Barra de status ---------- */
 QStatusBar {
     background: $surface;
     color: $text_muted;
@@ -233,7 +294,6 @@ QLabel#statusPill {
     margin: 3px 4px;
 }
 
-/* ---------- Barras de rolagem ---------- */
 QScrollBar:vertical {
     background: transparent;
     width: 14px;
@@ -268,7 +328,6 @@ QScrollBar::add-page, QScrollBar::sub-page {
     background: transparent;
 }
 
-/* ---------- Dicas ---------- */
 QToolTip {
     background: $text;
     color: #FFFFFF;
@@ -276,7 +335,6 @@ QToolTip {
     padding: 4px 8px;
 }
 
-/* ---------- Diálogos ---------- */
 QDialog, QMessageBox {
     background: $surface;
 }
@@ -320,7 +378,58 @@ QPushButton:disabled {
     border-color: $border;
 }
 
-/* ---------- Painel de propriedades do texto ---------- */
+QFrame#thumbnailPanel {
+    background: $surface;
+    border: none;
+    border-right: 1px solid $border;
+}
+QListWidget#thumbnailList {
+    background: $surface;
+    border: none;
+    outline: none;
+    color: $text_muted;
+}
+QListWidget#thumbnailList::item {
+    border-radius: 6px;
+    padding: 4px;
+}
+QListWidget#thumbnailList::item:hover {
+    background: $hover;
+}
+QListWidget#thumbnailList::item:selected {
+    background: $accent_soft;
+    color: $accent;
+}
+
+QFrame#searchBar {
+    background: $surface;
+    border: none;
+    border-bottom: 1px solid $border;
+}
+QFrame#searchBar QLineEdit {
+    padding: 4px 8px;
+    min-width: 220px;
+}
+QToolButton#searchButton {
+    background: transparent;
+    border: none;
+    border-radius: 6px;
+    padding: 4px;
+}
+QToolButton#searchButton:hover {
+    background: $hover;
+}
+QToolButton#searchButton:pressed {
+    background: $pressed;
+}
+QToolButton#searchButton:disabled {
+    background: transparent;
+}
+QLabel#searchStatus {
+    color: $text_muted;
+    padding: 0 6px;
+}
+
 QFrame#propertiesPanel {
     background: $surface;
     border: none;
@@ -414,7 +523,6 @@ def _build_palette() -> QPalette:
 
 
 def apply_theme(app: QApplication) -> None:
-    """Aplica estilo, paleta, fonte e QSS em toda a aplicação."""
     app.setStyle("Fusion")
     app.setPalette(_build_palette())
 

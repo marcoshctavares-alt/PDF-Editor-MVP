@@ -38,14 +38,6 @@ def _rgb_to_hex(color: tuple[float, float, float]) -> str:
 
 
 class TextPropertiesPanel(QFrame):
-    """Painel lateral com fonte, estilo, tamanho e cor do texto.
-
-    Não conhece o documento: apenas emite sinais. Quem usa o painel decide se
-    a mudança vale para um texto selecionado ou para os próximos textos.
-    """
-
-    # (campo, valor): "family" str, "bold"/"italic" bool, "size" float,
-    # "color" tupla (r, g, b) com valores de 0 a 1.
     property_changed = Signal(str, object)
     edit_requested = Signal()
     delete_requested = Signal()
@@ -93,9 +85,6 @@ class TextPropertiesPanel(QFrame):
         self._size.setSingleStep(1.0)
         self._size.setSuffix(" pt")
         self._size.setValue(DEFAULT_FONT_SIZE)
-        # Digitar "24" não deve disparar uma mudança para "2" no meio do
-        # caminho: com isso, o valor só é emitido no Enter ou ao sair do campo
-        # (as setas continuam emitindo na hora).
         self._size.setKeyboardTracking(False)
         self._size.valueChanged.connect(
             lambda value: self.property_changed.emit("size", float(value))
@@ -140,9 +129,6 @@ class TextPropertiesPanel(QFrame):
 
         self.set_has_selection(False)
 
-    # ------------------------------------------------------------------
-    # API pública
-    # ------------------------------------------------------------------
     def set_values(
         self,
         family: str,
@@ -151,7 +137,6 @@ class TextPropertiesPanel(QFrame):
         size: float,
         color: tuple[float, float, float],
     ) -> None:
-        """Mostra valores no painel SEM emitir property_changed."""
         for widget in (self._family, self._bold, self._italic, self._size):
             widget.blockSignals(True)
         try:
@@ -163,7 +148,7 @@ class TextPropertiesPanel(QFrame):
             for widget in (self._family, self._bold, self._italic, self._size):
                 widget.blockSignals(False)
 
-        self._color = tuple(color)  # type: ignore[assignment]
+        self._color = tuple(color)
         self._apply_color_style()
 
     def set_has_selection(self, has_selection: bool) -> None:
@@ -171,9 +156,6 @@ class TextPropertiesPanel(QFrame):
         self._edit_button.setEnabled(has_selection)
         self._delete_button.setEnabled(has_selection)
 
-    # ------------------------------------------------------------------
-    # Internos
-    # ------------------------------------------------------------------
     @staticmethod
     def _field_label(text: str) -> QLabel:
         label = QLabel(text)

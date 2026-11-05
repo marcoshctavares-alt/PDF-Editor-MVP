@@ -9,28 +9,52 @@ manipulação com PyMuPDF. O código é separado em duas camadas — `pdfcore`
 PDF seja testável independentemente e o projeto possa crescer sem virar uma
 bagunça.
 
-Ainda está em desenvolvimento. O que funciona hoje: abrir, visualizar,
-navegar, inserir texto e salvar como. O resto está na seção de roadmap.
+Ainda está em desenvolvimento. O que funciona hoje está na seção de
+funcionalidades; o que falta, no roadmap.
 
 
 ## Funcionalidades
 
-Já implementado:
-
-- Abrir PDFs via diálogo nativo
-- Renderizar páginas com DPI configurável
-- Navegar entre páginas (botões e atalhos de teclado)
-- Inserir texto clicando na posição desejada da página (`Ctrl+T`)
-- Exportar o PDF editado com "Salvar Como"
+- Abrir PDFs via diálogo nativo, com zoom e navegação por páginas
+- Painel de miniaturas (`F4` mostra ou oculta)
+- Inserir texto clicando na página, editar (`F2` ou duplo clique), mover por
+  arrasto ou com as setas do teclado (1 pt; com `Shift`, 10 pt) e apagar
+- Inserir imagens, arrastar e redimensionar mantendo a proporção
+- Anotações sobre o texto existente: destacar, sublinhar e riscar, arrastando
+  uma área; clique na anotação e `Delete` para remover
+- Copiar o texto de uma área para a área de transferência
+- Busca de texto com destaque dos resultados (`Ctrl+F`)
+- Girar, apagar e mover páginas
+- Desfazer e refazer em todas as edições (`Ctrl+Z` / `Ctrl+Y`)
+- Salvar no próprio arquivo (`Ctrl+S`) ou exportar com "Salvar Como"
+- Aviso ao fechar ou abrir outro PDF com alterações não salvas
 
 Roadmap (sem ordem definida):
 
-- Inserir imagens com posicionamento interativo
-- Busca e substituição de texto
-- Anotações (grifar, sublinhar)
-- Controle de zoom
-- Painel de miniaturas
-- Extração de texto
+- Substituição de texto
+- Reordenar páginas arrastando as miniaturas
+- Edição em páginas giradas (hoje bloqueada, veja abaixo)
+- Exportar o texto do PDF para um arquivo
+
+
+## Atalhos
+
+| Ação | Atalho |
+| --- | --- |
+| Abrir / Salvar / Salvar Como | `Ctrl+O` / `Ctrl+S` / `Ctrl+Shift+S` |
+| Página anterior / próxima | `PgUp` / `PgDn` |
+| Zoom + / − / 100% | `Ctrl+=` / `Ctrl+-` / `Ctrl+0` |
+| Inserir texto / imagem | `Ctrl+T` / `Ctrl+Shift+I` |
+| Destacar / sublinhar / riscar / copiar texto | `Ctrl+Shift+H` / `U` / `K` / `C` |
+| Editar texto selecionado | `F2` |
+| Apagar seleção | `Delete` |
+| Mover texto selecionado | setas (`Shift` para 10 pt) |
+| Girar página à direita / à esquerda | `Ctrl+R` / `Ctrl+Shift+R` |
+| Mover página para cima / para baixo | `Ctrl+Shift+PgUp` / `Ctrl+Shift+PgDn` |
+| Apagar página | `Ctrl+Del` |
+| Buscar | `Ctrl+F` |
+| Desfazer / refazer | `Ctrl+Z` / `Ctrl+Y` |
+| Cancelar o modo ativo | `Esc` |
 
 
 ## Stack
@@ -62,32 +86,70 @@ engine não sabe que o Qt existe, então dá para testar sem abrir janela.
 
     python main.py
 
-Abra um PDF com `Ctrl+O`, navegue com `PgUp`/`PgDn`, exporte com `Ctrl+Shift+S`. Para inserir texto, clique em **Inserir Texto** na toolbar (ou `Ctrl+T`), depois clique na posição desejada da página e digite o conteúdo. Esc cancela a inserção.
+Rode sempre a partir da pasta que contém `main.py` e `src`, porque o projeto
+importa os módulos como `src.pdfapp...`. No VS Code, abra essa pasta e use o
+terminal integrado em vez do botão de executar.
 
-O PyMuPDF não sobrescreve o arquivo aberto, então o "Salvar Como" sempre exige um caminho novo. A aplicação bloqueia a tentativa de sobrescrever para não gerar confusão.
+Abra um PDF com `Ctrl+O` e navegue com `PgUp`/`PgDn`. Para inserir texto, clique
+em **Inserir Texto** na toolbar (ou `Ctrl+T`), depois clique na posição desejada
+da página e digite o conteúdo. `Esc` cancela o modo ativo.
+
+### Salvar
+
+O PyMuPDF não sobrescreve o arquivo aberto. O "Salvar Como" sempre exige um
+caminho novo e a aplicação bloqueia a tentativa de sobrescrever. O `Ctrl+S`
+grava um arquivo temporário ao lado do original, troca o original por ele e
+reabre o documento na mesma página. Depois disso, textos, imagens e anotações
+passam a fazer parte do PDF: deixam de ser editáveis e o histórico de desfazer
+é zerado.
+
+### Páginas giradas
+
+Em páginas com rotação (as que você girou e as que já vêm com `/Rotate`), a
+edição fica bloqueada: inserir, anotar, copiar texto, selecionar e mover. Gire
+a página de volta para 0° para editar. Os itens que já estavam na página giram
+junto com ela.
 
 ## Estrutura
 
     pdf-editor-mvp/
     ├── main.py
+    ├── check_engine.py
     ├── requirements.txt
     ├── README.md
     ├── LICENSE
     ├── .gitignore
     └── src/
         ├── __init__.py
-        ├── pdfcore/           # engine, sem Qt
+        ├── pdfcore/               # engine, sem Qt
         │   ├── __init__.py
-        │   └── document.py
-        └── pdfapp/            # interface
+        │   ├── document.py        # PdfDocument: edição, histórico, busca, páginas
+        │   ├── geometry.py
+        │   ├── text_items.py
+        │   ├── image_items.py
+        │   ├── annotation_items.py
+        │   └── search.py
+        └── pdfapp/                # interface
             ├── __init__.py
             ├── main_window.py
-            ├── qt_image.py    # conversão Pixmap -> QImage
-            └── viewer.py
+            ├── viewer.py
+            ├── theme.py
+            ├── qt_image.py        # conversão Pixmap -> QImage
+            ├── text_panel.py
+            ├── thumbnails.py
+            ├── thumbnail_queue.py
+            ├── search_bar.py
+            └── search_controller.py
 
 ## Testando a engine sem interface
 
-A engine roda sem Qt. Para validar rápido:
+A engine roda sem Qt. O `check_engine.py` cria um PDF temporário, exercita
+texto, imagens, anotações, busca, histórico e o estado de modificado, e confere
+o conteúdo dos arquivos salvos. Não altera nenhum arquivo seu:
+
+    python check_engine.py
+
+Para um teste rápido com um PDF seu:
 
     python -c "
     from src.pdfcore.document import PdfDocument
